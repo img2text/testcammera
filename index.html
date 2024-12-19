@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QR Code Scanner</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            background-color: #f4f4f4;
+        }
+
+        #scanner {
+            width: 90%;
+            max-width: 400px;
+            position: relative;
+        }
+
+        video {
+            width: 100%;
+            border: 2px solid #333;
+            border-radius: 10px;
+        }
+
+        #overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            border: 2px dashed #00ff00;
+            border-radius: 10px;
+            pointer-events: none;
+        }
+
+        .controls {
+            margin-top: 20px;
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+        }
+
+        .controls button {
+            padding: 10px 20px;
+            font-size: 16px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            background-color: #007bff;
+            color: white;
+        }
+
+        .controls button:hover {
+            background-color: #0056b3;
+        }
+    </style>
+</head>
+<body>
+    <div id="scanner">
+        <video id="video" autoplay></video>
+        <div id="overlay"></div>
+    </div>
+    <div class="controls">
+        <button id="startScan">Bắt đầu quét</button>
+        <button id="stopScan">Dừng quét</button>
+    </div>
+
+    <script>
+        const video = document.getElementById('video');
+        const startScanButton = document.getElementById('startScan');
+        const stopScanButton = document.getElementById('stopScan');
+        let scanningInterval = null;
+        let scanning = false;
+
+        async function startCamera() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: {
+                        facingMode: "environment", // Mặt sau
+                        zoom: 2 // Zoom lên 2x
+                    }
+                });
+                video.srcObject = stream;
+            } catch (error) {
+                console.error("Không thể khởi động camera:", error);
+                alert("Không thể truy cập camera.");
+            }
+        }
+
+        function scanQRCode() {
+            if (!scanning) return;
+            const canvas = document.createElement('canvas');
+            const context = canvas.getContext('2d');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            context.drawImage(video, 0, 0, canvas.width, canvas.height);
+            const base64Image = canvas.toDataURL('image/png').split(',')[1];
+
+            // Gọi API quét mã QR
+            fetch(`${apigate}/scanfrombase64`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    base64Image: base64Image,
+                    cardType: "0"
+                }),
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        alert('QR Code đã được quét thành công!');
+                        clearInterval(scanningInterval);
+                        scanning = false;
+                        console.log(data.data);
+                        // Xử lý kết quả trả về
+                    } else {
+                        console.log('Quét không thành công, thử lại...');
+                    }
+                })
+                .catch(error => {
+                    console.error('Lỗi:', error);
+                });
+        }
+
+        startScanButton.addEventListener('click', () => {
+            scanning = true;
+            scanningInterval = setInterval(scanQRCode, 3000); // Quét mỗi 3 giây
+            setTimeout(() => {
+                if (scanning) {
+                    clearInterval(scanningInterval);
+                    scanning = false;
+                    alert('Hết thời gian quét.');
+                }
+            }, 60000); // Dừng sau 1 phút
+        });
+
+        stopScanButton.addEventListener('click', () => {
+            scanning = false;
+            clearInterval(scanningInterval);
+        });
+
+        // Khởi động camera
+        startCamera();
+    </script>
+</body>
+</html>
